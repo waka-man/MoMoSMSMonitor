@@ -14,8 +14,11 @@ import kotlinx.coroutines.launch
 class SMSReceiver : BroadcastReceiver() {
     private val TAG = "SMSReceiver"
     private val scope = CoroutineScope(Dispatchers.IO)
+    private lateinit var appContext: Context
 
     override fun onReceive(context: Context, intent: Intent) {
+        appContext = context.applicationContext
+        
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
             return
         }
@@ -54,5 +57,21 @@ class SMSReceiver : BroadcastReceiver() {
         val database = TransactionDatabase.getDatabase(context)
         val parser = SMSParser(database)
         parser.parseAndSaveTransaction(sender, body)
+    }
+    
+    /**
+     * Method for testing purposes - allows direct processing of test messages
+     * without requiring system permissions
+     */
+    fun processTestMessage(context: Context, sender: String, body: String) {
+        Log.d(TAG, "Processing test message from $sender: ${body.take(50)}...")
+        
+        scope.launch {
+            try {
+                processMoMoMessage(context, sender, body)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing test message: ${e.message}", e)
+            }
+        }
     }
 } 
