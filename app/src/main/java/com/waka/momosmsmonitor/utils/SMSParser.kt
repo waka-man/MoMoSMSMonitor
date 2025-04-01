@@ -105,14 +105,29 @@ class SMSParser(private val database: TransactionDatabase) {
     }
 
     private fun parseIncomingMoney(body: String): IncomingMoney? {
-        val pattern = """received (\d+) RWF from (.+?) \(.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Financial Transaction Id: (\d+)""".toRegex()
-        return pattern.find(body)?.let { match ->
-            IncomingMoney(
-                amount = match.groupValues[1].toDouble(),
-                sender = match.groupValues[2],
-                dateTime = match.groupValues[3],
-                transactionId = match.groupValues[4]
-            )
+
+        val amount_sender_match = """received (\d+) RWF from (.+?) \(""".toRegex()
+        val dateTime_match = """at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})""".toRegex()
+        val txnId_match = """Financial Transaction Id: (\d+)""".toRegex()
+
+        return amount_sender_match.find(body)?.let { amount_sender_match ->
+            val amount = amount_sender_match.groupValues[1].toDouble()
+            val sender = amount_sender_match.groupValues[2]
+
+            dateTime_match.find(body)?.let { dateTime_match ->
+                val dateTime = dateTime_match.groupValues[1]
+
+                txnId_match.find(body)?.let { txnId_match ->
+                    val txnId = txnId_match.groupValues[1]
+
+                    IncomingMoney(
+                        amount = amount,
+                        sender = sender,
+                        dateTime = dateTime,
+                        transactionId = txnId
+                    )
+                }
+            }
         }
     }
 
@@ -130,18 +145,33 @@ class SMSParser(private val database: TransactionDatabase) {
     }
 
     private fun parseTransferToMobile(body: String): TransferToMobile? {
-        val pattern = """(\d+) RWF transferred to (.+?) \((\d+)\).*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Fee was: (\d+) RWF""".toRegex()
-        return pattern.find(body)?.let { match ->
-            TransferToMobile(
-                amount = match.groupValues[1].toDouble(),
-                recipient = match.groupValues[2],
-                recipientNumber = match.groupValues[3],
-                dateTime = match.groupValues[4],
-                fee = match.groupValues[5].toDouble()
-            )
+        //val pattern = """(\d+) RWF transferred to (.+?) \((\d+)\).*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Fee was: (\d+) RWF""".toRegex()
+        val amount_recipient_match = """(\d+) RWF transferred to (.+?) \((250\d+)\)""".toRegex()
+        val dateTime_match = """at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})""".toRegex()
+        val fee_match = """Fee was: (\d+) RWF""".toRegex()
+
+        return amount_recipient_match.find(body)?.let { amount_recipient_match ->
+            val amount = amount_recipient_match.groupValues[1].toDouble()
+            val recipient = amount_recipient_match.groupValues[2]
+            val recipientNumber = amount_recipient_match.groupValues[3]
+
+            dateTime_match.find(body)?.let { dateTime_match ->
+                val dateTime = dateTime_match.groupValues[1]
+
+                fee_match.find(body)?.let { fee_match ->
+                    val fee = fee_match.groupValues[1].toDouble()
+
+                    TransferToMobile(
+                        amount = amount,
+                        recipient = recipient,
+                        recipientNumber = recipientNumber,
+                        dateTime = dateTime,
+                        fee = fee
+                    )
+                }
+            }
         }
     }
-
     private fun parseBankDeposit(body: String): BankDeposit? {
         val pattern = """deposit of (\d+) RWF.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})""".toRegex()
         return pattern.find(body)?.let { match ->
@@ -153,37 +183,45 @@ class SMSParser(private val database: TransactionDatabase) {
     }
 
     private fun parseAirtimePurchase(body: String): AirtimeBillPayment? {
-        val pattern = """TxId:(\d+)\*S\*Your payment of (\d+) RWF.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Fee was (\d+) RWF""".toRegex()
-        return pattern.find(body)?.let { match ->
+        //val pattern = """TxId:(\d+)\*S\*Your payment of (\d+) RWF.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Fee was (\d+) RWF""".toRegex()
+        val main_match = """TxId:(\d+)\*S\*Your payment of (\d+) RWF to (Airtime) with token.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})""".toRegex()
+        val fee_match = """Fee was (\d+) RWF""".toRegex()
+
+        return main_match.find(body)?.let { match ->
             AirtimeBillPayment(
                 transactionId = match.groupValues[1],
                 amount = match.groupValues[2].toDouble(),
-                dateTime = match.groupValues[3],
-                fee = match.groupValues[4].toDouble()
+                dateTime = match.groupValues[4],
+                fee = fee_match.find(body)?.groupValues?.get(1)?.toDouble() ?: 0.0
             )
         }
     }
 
-    private fun parseCashPowerPurchase(body: String): CashPowerBillPayment? {
-        val pattern = """TxId:(\d+)\*S\*Your payment of (\d+) RWF.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Fee was (\d+) RWF""".toRegex()
-        return pattern.find(body)?.let { match ->
+    private fun parseCashPowerPurchase(body: String): CashPowerBillPayment?{
+        //val pattern = """TxId:(\d+)\*S\*Your payment of (\d+) RWF.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Fee was (\d+) RWF""".toRegex()
+        val main_match = """TxId:(\d+)\*S\*Your payment of (\d+) RWF to (MTN Cash Power) with token.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})""".toRegex()
+        val fee_match = """Fee was (\d+) RWF""".toRegex()
+
+        return main_match.find(body)?.let { match ->
             CashPowerBillPayment(
                 transactionId = match.groupValues[1],
                 amount = match.groupValues[2].toDouble(),
-                dateTime = match.groupValues[3],
-                fee = match.groupValues[4].toDouble()
+                dateTime = match.groupValues[4],
+                fee = fee_match.find(body)?.groupValues?.get(1)?.toDouble() ?: 0.0
             )
         }
     }
 
     private fun parseThirdPartyTransaction(body: String): ThirdPartyTransaction? {
-        val pattern = """transaction of (\d+) RWF by (.*?) on your MOMO account.*?at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?Financial Transaction Id: (\d+)""".toRegex()
-        return pattern.find(body)?.let { match ->
+        val main_match = """A transaction of (\d+) RWF by (.*?) on your MOMO account was successfully completed at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})""".toRegex()
+        val txnId_match = """Financial Transaction Id: (\d+)""".toRegex()
+
+        return main_match.find(body)?.let { match ->
             ThirdPartyTransaction(
                 amount = match.groupValues[1].toDouble(),
                 initiatedBy = match.groupValues[2],
                 dateTime = match.groupValues[3],
-                transactionId = match.groupValues[4]
+                transactionId = txnId_match.find(body)?.groupValues?.get(1) ?: ""
             )
         }
     }

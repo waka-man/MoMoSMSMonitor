@@ -64,7 +64,7 @@ class SMSReceiver : BroadcastReceiver() {
      * without requiring system permissions
      */
     fun processTestMessage(context: Context, sender: String, body: String) {
-        Log.d(TAG, "Processing test message from $sender: ${body.take(50)}...")
+        Log.d(TAG, "Processing test message from $sender: ${body.take(100)}...")
         
         scope.launch {
             try {
